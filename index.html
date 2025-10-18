@@ -1,222 +1,176 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Pixel Tennis — Demo</title>
-  <style>
-    html,body{height:100%;margin:0;background:#2b6b3a;display:flex;align-items:center;justify-content:center}
-    #gameWrap{width:100%;max-width:900px;height:calc(100vh - 20px);background:#0b5a2b;position:relative;overflow:hidden;border:6px solid #0a3f20;box-shadow:0 8px 30px rgba(0,0,0,.6)}
-    canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
-    #jumpBtn{position:absolute;right:18px;bottom:18px;width:64px;height:64px;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff;font-family:monospace;user-select:none;touch-action:manipulation}
-    #hud{position:absolute;left:12px;top:12px;color:#fff;font-family:monospace;font-size:18px;text-shadow:0 1px 0 rgba(0,0,0,.6)}
-    /* small helper so disabling image smoothing for pixel look */
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Tennis</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    margin: 0 auto;
+    background: url('court.png') center/cover no-repeat;
+  }
+  #score {
+    position: fixed;
+    top: env(safe-area-inset-top, 15px);
+    left: 15px;
+    color: #fff;
+    font-size: 24px;
+    font-family: monospace;
+    text-shadow: 2px 2px 2px #000;
+    z-index: 10;
+  }
+  #jumpBtn {
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 20px);
+    right: 20px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    border: 2px solid white;
+    color: white;
+    font-size: 24px;
+    text-align: center;
+    line-height: 80px;
+    font-family: monospace;
+    user-select: none;
+    z-index: 10;
+  }
+</style>
 </head>
 <body>
-  <div id="gameWrap">
-    <canvas id="c"></canvas>
-    <div id="hud">Очки: <span id="score">0</span></div>
-    <div id="jumpBtn" role="button" aria-label="jump">JUMP</div>
-  </div>
+<div id="score">Очки: 0</div>
+<div id="jumpBtn">↑</div>
+<canvas id="game" width="800" height="600"></canvas>
 
 <script>
-/*
-  Pixel Tennis — single-file demo
-  Place your images g1.jpg (girl sprite) and b1.jpg (player sprite) in same folder as this file.
-  Optional: flame.png for a flame icon. If you don't have flame.png the game draws a small flame.
-
-  Controls:
-   - Desktop: drag the player with mouse
-   - Mobile: drag with finger
-   - Tap the JUMP button (bottom-right) to make player jump. If girl is near during the jump, you score.
-
-  Deploy: this is a static HTML file; you can deploy it to GitHub Pages, Netlify, or Vercel.
-*/
-
-const canvas = document.getElementById('c');
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false;
-
-// Logical resolution (pixel-art look) — scale up to fit screen
-const VW = 320; // virtual width
-const VH = 180; // virtual height
-let scale = 1;
-
-function resize() {
-  const wrap = document.getElementById('gameWrap');
-  const rect = wrap.getBoundingClientRect();
-  const deviceRatio = window.devicePixelRatio || 1;
-  canvas.width = VW;
-  canvas.height = VH;
-  canvas.style.width = rect.width + 'px';
-  canvas.style.height = rect.height + 'px';
-}
-window.addEventListener('resize', resize);
-resize();
-
-// Load images
-const girlImg = new Image(); girlImg.src = 'g1.jpg';
-const playerImg = new Image(); playerImg.src = 'b1.jpg';
-const flameImg = new Image(); flameImg.src = 'flame.png';
-
-// Entities
-const girl = {x: 40, y: 110, w: 28, h: 36, vx: 0.6};
-const player = {x: 220, y: 110, w: 28, h: 36, vy:0, onGround:true};
 
 let score = 0;
-let flames = []; // {x,y,t}
+let girlImg = new Image();
+let girlAlt = new Image();
+let boyImg = new Image();
+let bbbImg = new Image();
+let flame = new Image();
 
-// AI movement: random walk with occasional direction changes
-let aiTimer = 0;
-function updateAI(dt){
-  aiTimer -= dt;
-  if(aiTimer <= 0){
-    aiTimer = 0.6 + Math.random() * 1.4;
-    girl.vx = (Math.random() * 2 - 1) * 0.9; // -0.9 .. 0.9
-  }
-  girl.x += girl.vx * dt * 60;
-  // keep on court bounds
-  girl.x = Math.max(8, Math.min(VW - girl.w - 8, girl.x));
+girlImg.src = 'g1.jpg';
+girlAlt.src = 'g2.jpg';
+boyImg.src = 'b1.jpg';
+bbbImg.src = 'bbb1.jpg';
+flame.src = 'flame.png';
+
+let girl = { x: 400, y: 200, w: 70, h: 70 }; // уменьшено в 2 раза
+let boy = { x: 400, y: 450, w: 70, h: 70 };  // уменьшено в 2 раза
+let jumping = false;
+let jumpHeight = 0;
+let showFlame = false;
+let showBBB = false;
+let girlImageCurrent = girlImg;
+
+function resetGirl() {
+  girl.x = Math.random() * (canvas.width - girl.w);
+  girl.y = Math.random() * (canvas.height - 200);
 }
 
-// Physics for player jump
-const GRAV = 0.9;
-function updatePlayer(dt){
-  if(!player.onGround){
-    player.vy += GRAV * dt * 60;
-    player.y += player.vy * dt * 60;
-    if(player.y >= 110){ player.y = 110; player.vy = 0; player.onGround = true; }
-  }
-}
+resetGirl();
 
-// Flame spawn when successful jump-hit
-function tryScore(){
-  // consider 'close' if center distance < 40 px
-  const dx = (player.x + player.w/2) - (girl.x + girl.w/2);
-  const dy = (player.y + player.h/2) - (girl.y + girl.h/2);
-  const dist = Math.hypot(dx, dy);
-  if(dist < 48){
-    score += 1;
-    document.getElementById('score').textContent = score;
-    flames.push({x: (player.x+girl.x)/2, y: (player.y+girl.y)/2 - 10, t: 0});
-    // limit flames
-    if(flames.length > 6) flames.shift();
-  }
-}
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// Touch / mouse drag controls for player
-let dragging = false;
-let lastPointer = null;
+  // девочка
+  ctx.drawImage(girlImageCurrent, girl.x, girl.y, girl.w, girl.h);
 
-function pointerDown(e){
-  e.preventDefault();
-  dragging = true;
-  const p = getPointerPos(e);
-  lastPointer = p;
-}
-function pointerMove(e){
-  if(!dragging) return;
-  e.preventDefault();
-  const p = getPointerPos(e);
-  const dx = p.x - lastPointer.x;
-  const dy = p.y - lastPointer.y;
-  // move player in virtual coords (scale from canvas style)
-  const rect = canvas.getBoundingClientRect();
-  const factorX = VW / rect.width;
-  const factorY = VH / rect.height;
-  player.x += dx * factorX;
-  player.y += dy * factorY;
-  player.x = Math.max(8, Math.min(VW - player.w - 8, player.x));
-  player.y = Math.max(60, Math.min(110, player.y));
-  lastPointer = p;
-}
-function pointerUp(e){
-  dragging = false;
-}
+  // парень
+  ctx.drawImage(boyImg, boy.x, boy.y - jumpHeight, boy.w, boy.h);
 
-function getPointerPos(e){
-  if(e.touches && e.touches.length) return {x: e.touches[0].clientX, y: e.touches[0].clientY};
-  return {x: e.clientX, y: e.clientY};
-}
-
-canvas.addEventListener('mousedown', pointerDown);
-canvas.addEventListener('mousemove', pointerMove);
-window.addEventListener('mouseup', pointerUp);
-canvas.addEventListener('touchstart', pointerDown, {passive:false});
-canvas.addEventListener('touchmove', pointerMove, {passive:false});
-window.addEventListener('touchend', pointerUp);
-
-// Jump button
-const jumpBtn = document.getElementById('jumpBtn');
-jumpBtn.addEventListener('click', ()=>{
-  if(player.onGround){
-    player.vy = -9; player.onGround = false;
-    // check immediate scoring window (you can tune: only when near while in air)
-    setTimeout(()=> tryScore(), 180); // small delay to match peak
-  }
-});
-
-// Game loop
-let last = performance.now();
-function loop(t){
-  const dt = Math.min(0.033, (t - last) / 1000);
-  last = t;
-  updateAI(dt);
-  updatePlayer(dt);
-  // update flames
-  for(const f of flames) f.t += dt;
-  flames = flames.filter(f => f.t < 1.0);
-  render();
-  requestAnimationFrame(loop);
-}
-
-function render(){
-  // clear
-  ctx.fillStyle = '#1f6b3a';
-  ctx.fillRect(0,0,VW,VH);
-
-  // draw court lines (pixel-art style)
-  ctx.fillStyle = '#2de2a0';
-  ctx.fillRect(0, 148, VW, 6);
-  // center net line
-  ctx.fillStyle = '#cfcfcf';
-  ctx.fillRect(VW/2 - 1, 120, 2, 28);
-
-  // draw girl (AI)
-  if(girlImg.complete){
-    ctx.drawImage(girlImg, Math.round(girl.x), Math.round(girl.y), girl.w, girl.h);
-  } else {
-    ctx.fillStyle = '#ffccdd'; ctx.fillRect(girl.x, girl.y, girl.w, girl.h);
+  // если очко
+  if (showFlame) {
+    ctx.drawImage(flame, boy.x + boy.w / 2 - 15, boy.y - 50, 30, 30);
   }
 
-  // draw player
-  if(playerImg.complete){
-    ctx.drawImage(playerImg, Math.round(player.x), Math.round(player.y), player.w, player.h);
-  } else {
-    ctx.fillStyle = '#aaccff'; ctx.fillRect(player.x, player.y, player.w, player.h);
+  // картинка bbb1
+  if (showBBB) {
+    ctx.drawImage(bbbImg, girl.x + girl.w / 2 - 19, girl.y - 39, 39, 39);
   }
 
-  // draw flames
-  for(const f of flames){
-    const a = 1 - (f.t / 1.0);
-    ctx.globalAlpha = a;
-    if(flameImg.complete){
-      ctx.drawImage(flameImg, Math.round(f.x)-8, Math.round(f.y)-12, 16, 16);
+  requestAnimationFrame(draw);
+}
+draw();
+
+function updateScore() {
+  score++;
+  document.getElementById('score').textContent = 'Очки: ' + score;
+}
+
+function jump() {
+  if (jumping) return;
+  jumping = true;
+  let up = true;
+  let jumpInterval = setInterval(() => {
+    if (up) {
+      jumpHeight += 10;
+      if (jumpHeight >= 60) up = false;
     } else {
-      // small pixel flame drawing
-      ctx.fillStyle = 'orange'; ctx.fillRect(f.x-3, f.y-2, 6, 6);
-      ctx.fillStyle = 'yellow'; ctx.fillRect(f.x-1, f.y-6, 2, 4);
+      jumpHeight -= 10;
+      if (jumpHeight <= 0) {
+        clearInterval(jumpInterval);
+        jumping = false;
+      }
     }
-    ctx.globalAlpha = 1;
-  }
+  }, 30);
 
-  // optional debug — draw boundary
-  // ctx.strokeStyle='#000'; ctx.strokeRect(0,0,VW,VH);
+  // проверяем столкновение
+  if (
+    Math.abs((boy.x + boy.w/2) - (girl.x + girl.w/2)) < 50 &&
+    Math.abs((boy.y + boy.h/2) - (girl.y + girl.h/2)) < 50
+  ) {
+    updateScore();
+    showFlame = true;
+    girlImageCurrent = girlAlt;
+    showBBB = true;
+
+    setTimeout(() => {
+      showFlame = false;
+      showBBB = false;
+      girlImageCurrent = girlImg;
+      resetGirl();
+    }, 1000);
+  }
 }
 
-requestAnimationFrame(loop);
+// движение девочки
+setInterval(() => {
+  girl.x += (Math.random() - 0.5) * 40;
+  girl.y += (Math.random() - 0.5) * 40;
+  girl.x = Math.max(0, Math.min(canvas.width - girl.w, girl.x));
+  girl.y = Math.max(0, Math.min(canvas.height - 200, girl.y));
+}, 500);
 
+// управление пальцем (тач)
+let touchStartX = 0;
+document.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+});
+document.addEventListener('touchmove', e => {
+  let deltaX = e.touches[0].clientX - touchStartX;
+  boy.x += deltaX * 0.3;
+  touchStartX = e.touches[0].clientX;
+});
+document.getElementById('jumpBtn').addEventListener('touchstart', jump);
+
+// управление мышью (для теста на ПК)
+document.addEventListener('mousemove', e => {
+  boy.x = e.clientX - boy.w / 2;
+});
+document.addEventListener('click', jump);
 </script>
 </body>
 </html>
