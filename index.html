@@ -69,10 +69,11 @@ const bbbImg = new Image();
 bbbImg.src = 'bbb1.jpg';
 
 // Игровые объекты
-const girl = { x:100, y:100, width:50, height:50, img:null, bbbTimer:0 };
-const boy = { x:canvas.width/2, y:canvas.height/2, width:50, height:50 };
+const girl = { x:100, y:100, width:0, height:0, img:null, bbbTimer:0 };
+const boy = { x:canvas.width/2, y:canvas.height/2, width:0, height:0 };
 let jump = false;
 let jumpTimer = 0;
+let jumpScored = false; // новый флаг для одного очка за прыжок
 let score = 0;
 const scoreDisplay = document.getElementById('scoreDisplay');
 
@@ -108,12 +109,20 @@ function checkCollision(){
     const dx = (boy.x + boy.width/2) - (girl.x + girl.width/2);
     const dy = (boy.y + boy.height/2) - (girl.y + girl.height/2);
     const dist = Math.sqrt(dx*dx + dy*dy);
-    if(dist < 50 && jumpTimer>0){
+    
+    // Начисляем очко только один раз за прыжок
+    if(dist < 50 && jumpTimer > 0 && !jumpScored){
         score++;
         scoreDisplay.innerText = `Score: ${score}`;
         girl.img = girlImg2;
         girl.bbbTimer = 10; // показываем bbb1.jpg 1 сек (~10 кадров)
         setTimeout(()=>{girl.img=girlImg1}, 1000);
+        jumpScored = true; // очко уже засчитано
+    }
+
+    // Сбрасываем флаг после окончания прыжка
+    if(jumpTimer === 0){
+        jumpScored = false;
     }
 }
 
@@ -159,11 +168,11 @@ images.forEach(img=>{
     img.onload = ()=>{
         loadedCount++;
         if(loadedCount === images.length){
-            // Задаём размеры фигурок после загрузки
-            girl.width = girlImg1.width/2;
-            girl.height = girlImg1.height/2;
-            boy.width = boyImg.width/2;
-            boy.height = boyImg.height/2;
+            // Используем оригинальные размеры
+            girl.width = girlImg1.width;
+            girl.height = girlImg1.height;
+            boy.width = boyImg.width;
+            boy.height = boyImg.height;
             girl.img = girlImg1;
             // Старт игры
             moveGirlRandomly();
