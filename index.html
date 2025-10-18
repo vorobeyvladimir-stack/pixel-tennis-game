@@ -52,7 +52,7 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Загрузка изображений
+// Создаём изображения
 const bgImg = new Image();
 bgImg.src = 'court.png';
 
@@ -69,130 +69,108 @@ const bbbImg = new Image();
 bbbImg.src = 'bbb1.jpg';
 
 // Игровые объекты
-const girl = {
-    x: 100,
-    y: 100,
-    width: 0,
-    height: 0,
-    img: girlImg1,
-    movingInterval: null
-};
-
-const boy = {
-    x: canvas.width/2,
-    y: canvas.height/2,
-    width: 0,
-    height: 0
-};
-
+const girl = { x:100, y:100, width:50, height:50, img:null, bbbTimer:0 };
+const boy = { x:canvas.width/2, y:canvas.height/2, width:50, height:50 };
 let jump = false;
 let jumpTimer = 0;
 let score = 0;
 const scoreDisplay = document.getElementById('scoreDisplay');
 
-// Уменьшение высоты фигурок в 2 раза
-girlImg1.onload = () => girl.height = girlImg1.height/2;
-girlImg1.onload = () => girl.width = girlImg1.width * (girl.height / girlImg1.height);
-girlImg2.onload = () => {};
-boyImg.onload = () => {
-    boy.height = boyImg.height/2;
-    boy.width = boyImg.width * (boy.height / boyImg.height);
-};
-
-// Случайное движение девочки
-function moveGirlRandomly() {
-    girl.movingInterval = setInterval(() => {
-        const dx = (Math.random()-0.5)*10;
-        const dy = (Math.random()-0.5)*10;
-        girl.x += dx;
-        girl.y += dy;
-
-        // Ограничение по канвасу
-        if(girl.x < 0) girl.x = 0;
-        if(girl.y < 0) girl.y = 0;
-        if(girl.x > canvas.width - girl.width) girl.x = canvas.width - girl.width;
-        if(girl.y > canvas.height - girl.height) girl.y = canvas.height - girl.height;
-    }, 200);
-}
-moveGirlRandomly();
-
-// Управление мальчиком на мобильных
-let touchStartX = null;
-let touchStartY = null;
-
+// Мобильное управление
+let touchStartX = null, touchStartY = null;
 canvas.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
 });
-
 canvas.addEventListener('touchmove', e => {
-    if(touchStartX !== null && touchStartY !== null){
+    if(touchStartX!==null && touchStartY!==null){
         const dx = e.touches[0].clientX - touchStartX;
         const dy = e.touches[0].clientY - touchStartY;
         boy.x += dx;
         boy.y += dy;
-        // Ограничение внутри канваса
-        if(boy.x < 0) boy.x = 0;
-        if(boy.y < 0) boy.y = 0;
-        if(boy.x > canvas.width - boy.width) boy.x = canvas.width - boy.width;
-        if(boy.y > canvas.height - boy.height) boy.y = canvas.height - boy.height;
+        if(boy.x<0) boy.x=0;
+        if(boy.y<0) boy.y=0;
+        if(boy.x>canvas.width-boy.width) boy.x=canvas.width-boy.width;
+        if(boy.y>canvas.height-boy.height) boy.y=canvas.height-boy.height;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
     }
 });
 
 // Кнопка подпрыгивания
-document.getElementById('jumpButton').addEventListener('click', () => {
+document.getElementById('jumpButton').addEventListener('click', ()=>{
     jump = true;
-    jumpTimer = 10; // количество кадров прыжка
+    jumpTimer = 10;
 });
 
-// Проверка на столкновение (для начисления очка)
-function checkCollision() {
+// Проверка столкновения
+function checkCollision(){
     const dx = (boy.x + boy.width/2) - (girl.x + girl.width/2);
     const dy = (boy.y + boy.height/2) - (girl.y + girl.height/2);
-    const distance = Math.sqrt(dx*dx + dy*dy);
-    if(distance < 50 && jumpTimer > 0) {
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist < 50 && jumpTimer>0){
         score++;
         scoreDisplay.innerText = `Score: ${score}`;
-        // Анимация: девочка меняет картинку + bbb1.jpg появляется
         girl.img = girlImg2;
-        setTimeout(() => {
-            girl.img = girlImg1;
-        }, 1000);
-        // bbb1.jpg на 1 сек над девочкой
-        girl.bbbTimer = 10; // показывать 10 кадров (~1 сек)
+        girl.bbbTimer = 10; // показываем bbb1.jpg 1 сек (~10 кадров)
+        setTimeout(()=>{girl.img=girlImg1}, 1000);
     }
 }
 
-function update() {
-    if(jumpTimer > 0) jumpTimer--;
-    if(girl.bbbTimer > 0) girl.bbbTimer--;
+// Случайное движение девочки
+function moveGirlRandomly(){
+    setInterval(()=>{
+        const dx = (Math.random()-0.5)*10;
+        const dy = (Math.random()-0.5)*10;
+        girl.x += dx;
+        girl.y += dy;
+        if(girl.x<0) girl.x=0;
+        if(girl.y<0) girl.y=0;
+        if(girl.x>canvas.width-girl.width) girl.x=canvas.width-girl.width;
+        if(girl.y>canvas.height-girl.height) girl.y=canvas.height-girl.height;
+    },200);
+}
+
+// Основные функции
+function update(){
+    if(jumpTimer>0) jumpTimer--;
+    if(girl.bbbTimer>0) girl.bbbTimer--;
     checkCollision();
 }
 
-function draw() {
+function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    // Фон
     ctx.drawImage(bgImg,0,0,canvas.width,canvas.height);
-    // Девочка
-    ctx.drawImage(girl.img, girl.x, girl.y, girl.width, girl.height);
-    // bbb1.jpg если нужно
-    if(girl.bbbTimer > 0) {
-        ctx.drawImage(bbbImg, girl.x + girl.width/2 - 19, girl.y - 39, 39, 39);
-    }
-    // Мальчик
-    ctx.drawImage(boyImg, boy.x, boy.y, boy.width, boy.height);
+    if(girl.img) ctx.drawImage(girl.img,girl.x,girl.y,girl.width,girl.height);
+    if(girl.bbbTimer>0) ctx.drawImage(bbbImg,girl.x+girl.width/2-19,girl.y-39,39,39);
+    if(boyImg.complete) ctx.drawImage(boyImg,boy.x,boy.y,boy.width,boy.height);
 }
 
-function gameLoop() {
+function gameLoop(){
     update();
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+// Ждём загрузки всех изображений
+let loadedCount = 0;
+const images = [bgImg,girlImg1,girlImg2,boyImg,bbbImg];
+images.forEach(img=>{
+    img.onload = ()=>{
+        loadedCount++;
+        if(loadedCount === images.length){
+            // Задаём размеры фигурок после загрузки
+            girl.width = girlImg1.width/2;
+            girl.height = girlImg1.height/2;
+            boy.width = boyImg.width/2;
+            boy.height = boyImg.height/2;
+            girl.img = girlImg1;
+            // Старт игры
+            moveGirlRandomly();
+            gameLoop();
+        }
+    }
+});
 </script>
-
 </body>
 </html>
