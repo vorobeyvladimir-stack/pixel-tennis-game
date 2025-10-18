@@ -1,176 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pixel Tennis</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Pixel Tennis — Responsive</title>
 <style>
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: #000;
+  :root{
+    --hud-padding: 12px;
+    --jump-size: 64px;
+  }
+  html,body{
+    height:100%;
+    margin:0;
+    background:#0b2e18;
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    -ms-user-select:none;
+    user-select:none;
+    overflow:hidden;
+  }
+  /* wrapper occupies full viewport but we keep some padding for safe-area and HUD */
+  #wrap{
+    position:relative;
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-sizing:border-box;
+    padding: env(safe-area-inset-top,12px) env(safe-area-inset-right,12px) env(safe-area-inset-bottom,12px) env(safe-area-inset-left,12px);
+  }
+
+  /* canvas is drawn at a fixed internal resolution, but CSS-scaled to fit viewport */
+  canvas{
+    image-rendering: pixelated;
+    background: transparent;
+    display:block;
+    max-width:100%;
+    max-height:100%;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    border-radius:10px;
+  }
+
+  /* HUD and button fixed on top of canvas */
+  #hud{
+    position: absolute;
+    left: calc(var(--hud-padding));
+    top: calc(var(--hud-padding));
+    z-index:20;
+    font-family: monospace;
+    color: #fff;
+    background: rgba(0,0,0,0.35);
+    padding: 8px 12px;
+    border-radius:8px;
+    font-size:16px;
+    text-shadow:0 1px 0 #000;
+  }
+
+  #jumpBtn{
+    position:absolute;
+    right: calc(var(--hud-padding));
+    bottom: calc(var(--hud-padding));
+    z-index:20;
+    width: var(--jump-size);
+    height: var(--jump-size);
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: rgba(255,255,255,0.08);
+    color:#fff;
+    font-family:monospace;
+    font-weight:700;
+    user-select:none;
+    -webkit-user-select:none;
     touch-action: none;
   }
-  canvas {
-    display: block;
-    margin: 0 auto;
-    background: url('court.png') center/cover no-repeat;
-  }
-  #score {
-    position: fixed;
-    top: env(safe-area-inset-top, 15px);
-    left: 15px;
-    color: #fff;
-    font-size: 24px;
-    font-family: monospace;
-    text-shadow: 2px 2px 2px #000;
-    z-index: 10;
-  }
-  #jumpBtn {
-    position: fixed;
-    bottom: env(safe-area-inset-bottom, 20px);
-    right: 20px;
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.3);
-    border: 2px solid white;
-    color: white;
-    font-size: 24px;
-    text-align: center;
-    line-height: 80px;
-    font-family: monospace;
-    user-select: none;
-    z-index: 10;
+
+  /* ensure small screens look good */
+  @media (max-width:420px){
+    :root{ --jump-size:56px; }
+    #hud{ font-size:14px; padding:6px 10px; }
   }
 </style>
 </head>
 <body>
-<div id="score">Очки: 0</div>
-<div id="jumpBtn">↑</div>
-<canvas id="game" width="800" height="600"></canvas>
+  <div id="wrap">
+    <canvas id="c"></canvas>
+    <div id="hud">Очки: <span id="score">0</span></div>
+    <div id="jumpBtn" role="button" aria-label="jump">JUMP</div>
+  </div>
 
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+/*
+ Responsive Pixel Tennis — Updated
 
-let score = 0;
-let girlImg = new Image();
-let girlAlt = new Image();
-let boyImg = new Image();
-let bbbImg = new Image();
-let flame = new Image();
+ Place these files alongside index.html:
+ - court.png   (top-down pixel court background)
+ - g1.jpg      (girl default)
+ - g2.jpg      (girl hit state)
+ - b1.jpg      (player)
+ - bbb1.jpg    (overlay image, 39x39)
+ - flame.png   (optional flame icon)
 
-girlImg.src = 'g1.jpg';
-girlAlt.src = 'g2.jpg';
-boyImg.src = 'b1.jpg';
-bbbImg.src = 'bbb1.jpg';
-flame.src = 'flame.png';
+ Key changes:
+ - Canvas scales to fit available viewport both portrait and landscape.
+ - Pointer-based dragging moves player full 2D across the playable area.
+ - Scoring/overlay logic doesn't block further play.
+*/
 
-let girl = { x: 400, y: 200, w: 70, h: 70 }; // уменьшено в 2 раза
-let boy = { x: 400, y: 450, w: 70, h: 70 };  // уменьшено в 2 раза
-let jumping = false;
-let jumpHeight = 0;
-let showFlame = false;
-let showBBB = false;
-let girlImageCurrent = girlImg;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = false;
 
-function resetGirl() {
-  girl.x = Math.random() * (canvas.width - girl.w);
-  girl.y = Math.random() * (canvas.height - 200);
-}
+// Virtual logical resolution (game world). Keep aspect so sprites and movement feel right.
+const VIRTUAL_W = 320;
+const VIRTUAL_H = 180;
 
-resetGirl();
+// Elements
+const hudScore = document.getElementById('score');
+const jumpBtn = document.getElementById('jumpBtn');
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Images
+const bgImg = new Image(); bgImg.src = 'court.png';
+const g1 = new Image(); g1.src = 'g1.jpg';
+const g2 = new Image(); g2.src = 'g2.jpg';
+const boyImg = new Image(); boyImg.src = 'b1.jpg';
+const bbbImg = new Image(); bbbImg.src = 'bbb1.jpg';
+const flameImg = new Image(); flameImg.src = 'flame.png';
 
-  // девочка
-  ctx.drawImage(girlImageCurrent, girl.x, girl.y, girl.w, girl.h);
-
-  // парень
-  ctx.drawImage(boyImg, boy.x, boy.y - jumpHeight, boy.w, boy.h);
-
-  // если очко
-  if (showFlame) {
-    ctx.drawImage(flame, boy.x + boy.w / 2 - 15, boy.y - 50, 30, 30);
-  }
-
-  // картинка bbb1
-  if (showBBB) {
-    ctx.drawImage(bbbImg, girl.x + girl.w / 2 - 19, girl.y - 39, 39, 39);
-  }
-
-  requestAnimationFrame(draw);
-}
-draw();
-
-function updateScore() {
-  score++;
-  document.getElementById('score').textContent = 'Очки: ' + score;
-}
-
-function jump() {
-  if (jumping) return;
-  jumping = true;
-  let up = true;
-  let jumpInterval = setInterval(() => {
-    if (up) {
-      jumpHeight += 10;
-      if (jumpHeight >= 60) up = false;
-    } else {
-      jumpHeight -= 10;
-      if (jumpHeight <= 0) {
-        clearInterval(jumpInterval);
-        jumping = false;
-      }
-    }
-  }, 30);
-
-  // проверяем столкновение
-  if (
-    Math.abs((boy.x + boy.w/2) - (girl.x + girl.w/2)) < 50 &&
-    Math.abs((boy.y + boy.h/2) - (girl.y + girl.h/2)) < 50
-  ) {
-    updateScore();
-    showFlame = true;
-    girlImageCurrent = girlAlt;
-    showBBB = true;
-
-    setTimeout(() => {
-      showFlame = false;
-      showBBB = false;
-      girlImageCurrent = girlImg;
-      resetGirl();
-    }, 1000);
-  }
-}
-
-// движение девочки
-setInterval(() => {
-  girl.x += (Math.random() - 0.5) * 40;
-  girl.y += (Math.random() - 0.5) * 40;
-  girl.x = Math.max(0, Math.min(canvas.width - girl.w, girl.x));
-  girl.y = Math.max(0, Math.min(canvas.height - 200, girl.y));
-}, 500);
-
-// управление пальцем (тач)
-let touchStartX = 0;
-document.addEventListener('touchstart', e => {
-  touchStartX = e.touches[0].clientX;
-});
-document.addEventListener('touchmove', e => {
-  let deltaX = e.touches[0].clientX - touchStartX;
-  boy.x += deltaX * 0.3;
-  touchStartX = e.touches[0].clientX;
-});
-document.getElementById('jumpBtn').addEventListener('touchstart', jump);
-
-// управление мышью (для теста на ПК)
-document.addEventListener('mousemove', e => {
-  boy.x = e.clientX - boy.w / 2;
-});
-document.addEventListener('click', jump);
-</script>
-</body>
-</html>
+// player / girl sizes (logical world units)
+const ORIGINAL_HEIGHT_FACTOR = 1; // we control draw sizes directly
+// We'll draw sprites with half height relative to previous attempts:
+const GIRL_W = 28;
+const GIRL_H = 18;   // half-height (smaller)
+const BOY_W  = 28;
+const BOY_H  = 18_
